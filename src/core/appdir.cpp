@@ -14,11 +14,10 @@
 // local headers
 #include "linuxdeploy/core/appdir.h"
 #include "linuxdeploy/core/elf_file.h"
-#include "linuxdeploy/core/log.h"
-#include "linuxdeploy/desktopfile/desktopfileentry.h"
+#include "linuxdeploy/log/log.h"
 #include "linuxdeploy/util/util.h"
 #include "linuxdeploy/subprocess/subprocess.h"
-#include "copyright.h"
+#include "copyright/copyright.h"
 
 // auto-generated headers
 #include "excludelist.h"
@@ -26,7 +25,7 @@
 
 using namespace linuxdeploy::core;
 using namespace linuxdeploy::desktopfile;
-using namespace linuxdeploy::core::log;
+using namespace linuxdeploy::log;
 
 using namespace cimg_library;
 
@@ -158,7 +157,7 @@ namespace linuxdeploy {
                                 return false;
                             }
 
-                            if (*(to.string().end() - 1) == '/' || fs::is_directory(to))
+                            if (to.string().back() == '/' || fs::is_directory(to))
                                 to /= from.filename();
 
                             if (!overwrite && fs::exists(to)) {
@@ -356,9 +355,16 @@ namespace linuxdeploy {
                     }
 
                     bool deployElfDependencies(const fs::path& path) {
+                        elf_file::ElfFile elfFile(path);
+
+                        if (!elfFile.isDynamicallyLinked()) {
+                            ldLog() << LD_WARNING << "ELF file" << path << "is not dynamically linked, skipping" << std::endl;
+                            return true;
+                        }
+
                         ldLog() << "Deploying dependencies for ELF file" << path << std::endl;
                         try {
-                            for (const auto &dependencyPath : elf_file::ElfFile(path).traceDynamicDependencies())
+                            for (const auto &dependencyPath : elfFile.traceDynamicDependencies())
                                 if (!deployLibrary(dependencyPath, false, false))
                                     return false;
                         } catch (const elf_file::DependencyNotFoundError& e) {
@@ -718,37 +724,52 @@ namespace linuxdeploy {
                 return d->appDirPath;
             }
 
-            static std::vector<fs::path> listFilesInDirectory(const fs::path& path, const bool recursive = true) {
-                std::vector<fs::path> foundPaths;
-
+            template <typename Consumer>
+            static void forEachInDirectory(const fs::path& path, const bool recursive, Consumer&& consumer) {
                 // directory_iterators throw exceptions if the directory doesn't exist
                 if (!fs::is_directory(path)) {
                     ldLog() << LD_DEBUG << "No such directory:" << path << std::endl;
-                    return {};
+                    return;
                 }
 
                 if (recursive) {
-                    for (fs::recursive_directory_iterator i(path); i != fs::recursive_directory_iterator(); ++i) {
-                        if (fs::is_regular_file(*i)) {
-                            foundPaths.push_back((*i).path());
-                        }
-                    }
+                    std::for_each(fs::recursive_directory_iterator(path), fs::recursive_directory_iterator(), consumer);
                 } else {
-                    for (fs::directory_iterator i(path); i != fs::directory_iterator(); ++i) {
-                        if (fs::is_regular_file(*i)) {
-                            foundPaths.push_back((*i).path());
-                        }
-                    }
+                    std::for_each(fs::directory_iterator(path), fs::directory_iterator(), consumer);
                 }
+            }
 
+            static std::vector<fs::path> listFilesInDirectory(const fs::path& path, const bool recursive = true) {
+                std::vector<fs::path> foundPaths;
+                forEachInDirectory(path, recursive, [&foundPaths](const fs::directory_entry& dirEntry) {
+                    if (fs::is_regular_file(dirEntry.status()))
+                        foundPaths.push_back(dirEntry.path());
+                });
                 return foundPaths;
             }
 
-            std::vector<fs::path> AppDir::deployedIconPaths() const {
-                auto icons = listFilesInDirectory(path() / "usr/share/icons/");
-                auto pixmaps = listFilesInDirectory(path() / "usr/share/pixmaps/", false);
-                icons.reserve(pixmaps.size());
-                std::copy(pixmaps.begin(), pixmaps.end(), std::back_inserter(icons));
+            std::vector<fs::path> AppDir::deployedIconPaths() const
+            {
+                // Rough equivalent in shell:
+                // appIconDirs=`ls -d $APPDIR/usr/share/icons/hicolor/*/apps/ $APPDIR/usr/share/pixmaps/`
+                std::vector<fs::path> appIconDirs;
+                forEachInDirectory(path() / "usr/share/icons/hicolor/", false,
+                                   [&appIconDirs](const fs::directory_entry &dirEntry) {
+                                       if (fs::is_directory(dirEntry.status()))
+                                           appIconDirs.emplace_back(dirEntry.path() / "apps/");
+                                   });
+                appIconDirs.emplace_back(path() / "usr/share/pixmaps/");
+
+                // for dirEntry in $appIconDirs; do icons="$icons `ls $dirEntry/*.{svg,png,xpm}`"; done
+                std::vector<fs::path> icons;
+                for (const auto& dir : appIconDirs) {
+                    forEachInDirectory(dir, false, [&icons](const fs::directory_entry& dirEntry) {
+                        const auto extension = util::strLower(dirEntry.path().extension().string());
+                        if ((extension == ".svg" || extension == ".png" || extension == ".xpm")
+                            && fs::is_regular_file(dirEntry.status()))
+                            icons.emplace_back(dirEntry.path());
+                    });
+                }
                 return icons;
             }
 

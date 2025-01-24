@@ -9,11 +9,11 @@
 
 // local headers
 #include "linuxdeploy/core/elf_file.h"
-#include "linuxdeploy/core/log.h"
+#include "linuxdeploy/log/log.h"
 #include "linuxdeploy/util/util.h"
 #include "linuxdeploy/subprocess/subprocess.h"
 
-using namespace linuxdeploy::core::log;
+using namespace linuxdeploy::log;
 
 namespace fs = std::filesystem;
 
@@ -188,6 +188,9 @@ namespace linuxdeploy {
                 // the caller doesn't care _how_ it's done, after all
 
                 // for now, we use the same ldd based method linuxdeployqt uses
+
+                // of course, it makes no sense to call this method on statically linked binaries
+                assert(isDynamicallyLinked());
 
                 std::vector<fs::path> paths;
 

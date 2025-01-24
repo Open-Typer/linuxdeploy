@@ -1,5 +1,4 @@
 // system headers
-#include <glob.h>
 #include <iostream>
 
 // library headers
@@ -8,15 +7,14 @@
 // local headers
 #include "linuxdeploy/core/appdir.h"
 #include "linuxdeploy/desktopfile/desktopfile.h"
-#include "linuxdeploy/core/elf_file.h"
-#include "linuxdeploy/core/log.h"
+#include "linuxdeploy/log/log.h"
 #include "linuxdeploy/plugin/plugin.h"
 #include "linuxdeploy/util/util.h"
 #include "core.h"
 
 using namespace linuxdeploy;
 using namespace linuxdeploy::core;
-using namespace linuxdeploy::core::log;
+using namespace linuxdeploy::log;
 using namespace linuxdeploy::util;
 
 namespace fs = std::filesystem;
@@ -212,7 +210,7 @@ int main(int argc, char** argv) {
             ldLog() << std::endl << "-- Running input plugin:" << pluginName << "--" << std::endl;
 
             if (it == foundPlugins.end()) {
-                ldLog() << LD_ERROR << "Could not find plugin:" << pluginName;
+                ldLog() << LD_ERROR << "Could not find plugin:" << pluginName << std::endl;
                 return 1;
             }
 
@@ -338,7 +336,7 @@ int main(int argc, char** argv) {
             ldLog() << std::endl << "-- Running output plugin:" << pluginName << "--" << std::endl;
 
             if (it == foundPlugins.end()) {
-                ldLog() << LD_ERROR << "Could not find plugin:" << pluginName;
+                ldLog() << LD_ERROR << "Could not find plugin:" << pluginName << std::endl;
                 return 1;
             }
 
